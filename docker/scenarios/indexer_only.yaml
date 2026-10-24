@@ -1,0 +1,5 @@
+description: Background code indexer alone (RAM + I/O). Corpus is kept in a named volume so runs are identical.
+containers:
+  indexer:
+    image: indexer-sim
+    volumes: {rt-indexer-corpus: /corpus}

@@ -1,0 +1,9 @@
+description: BUILD vs a pure CPU hog at increasing intensity (8 vCPU VM).
+containers:
+  build: {image: build-sim, env: {JOBS: 4}}
+  hog:   {image: cpu-hog}
+default_level: medium
+levels:
+  low:    {hog: {env: {CPU_WORKERS: 2}}}
+  medium: {hog: {env: {CPU_WORKERS: 4}}}
+  high:   {hog: {env: {CPU_WORKERS: 8}}}

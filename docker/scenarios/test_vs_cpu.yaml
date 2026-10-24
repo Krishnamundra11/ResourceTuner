@@ -1,0 +1,9 @@
+description: TESTING vs a pure CPU hog at increasing intensity.
+containers:
+  tests: {image: test-sim, env: {WORKERS: 4}}
+  hog:   {image: cpu-hog}
+default_level: medium
+levels:
+  low:    {hog: {env: {CPU_WORKERS: 2}}}
+  medium: {hog: {env: {CPU_WORKERS: 4}}}
+  high:   {hog: {env: {CPU_WORKERS: 6}}}

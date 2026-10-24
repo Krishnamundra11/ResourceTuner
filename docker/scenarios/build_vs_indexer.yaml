@@ -1,0 +1,13 @@
+description: >
+  Phase 2 milestone scenario (Step 9) — BUILD competing with background indexers for CPU.
+  The build uses every core, so each indexer replica takes CPU time away from it.
+containers:
+  build: {image: build-sim, env: {JOBS: 8}}
+  indexer:
+    image: indexer-sim
+    volumes: {rt-indexer-corpus: /corpus}
+default_level: medium
+levels:
+  low:    {indexer: {replicas: 1}}
+  medium: {indexer: {replicas: 2}}
+  high:   {indexer: {replicas: 4}}

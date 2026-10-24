@@ -1,0 +1,8 @@
+description: I/O hog alone — "congestion" calibration state for I/O thresholds.
+containers:
+  hog: {image: io-hog}
+default_level: medium
+levels:
+  low:    {hog: {env: {HDD_WORKERS: 1}}}
+  medium: {hog: {env: {HDD_WORKERS: 2}}}
+  high:   {hog: {env: {HDD_WORKERS: 4}}}

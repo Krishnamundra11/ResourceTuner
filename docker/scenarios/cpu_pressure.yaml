@@ -1,0 +1,8 @@
+description: CPU hog alone — "congestion" calibration state for CPU thresholds.
+containers:
+  hog: {image: cpu-hog}
+default_level: medium
+levels:
+  low:    {hog: {env: {CPU_WORKERS: 2}}}
+  medium: {hog: {env: {CPU_WORKERS: 4}}}
+  high:   {hog: {env: {CPU_WORKERS: 8}}}

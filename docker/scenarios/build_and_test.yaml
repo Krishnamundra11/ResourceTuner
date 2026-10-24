@@ -1,0 +1,6 @@
+description: >
+  BUILD and TESTING active at the same time (both CPU-significant) — the "conflicting
+  signals" case from §5 that must mechanically trigger the classifier's LLM fallback.
+containers:
+  build: {image: build-sim, env: {JOBS: 3}}
+  tests: {image: test-sim, env: {WORKERS: 3}}

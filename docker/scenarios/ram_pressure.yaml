@@ -1,0 +1,12 @@
+description: >
+  Memory hog alone — "congestion" calibration state for memory thresholds. "high" sets the
+  cap BELOW the allocation. With no swap, anon memory can't be reclaimed, so the kernel
+  OOM-kills the worker repeatedly (stress-ng respawns it): the signal is memory.events
+  (max / oom_kill counters), not memory PSI, which stays ~0.
+containers:
+  hog: {image: ram-hog, mem_limit: 2g, env: {VM_BYTES: 1536M}}
+default_level: medium
+levels:
+  low:    {hog: {mem_limit: 1g, env: {VM_BYTES: 512M}}}
+  medium: {hog: {mem_limit: 2g, env: {VM_BYTES: 1536M}}}
+  high:   {hog: {mem_limit: 1g, env: {VM_BYTES: 1200M}}}

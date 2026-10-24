@@ -1,0 +1,3 @@
+description: TESTING workload alone (pytest suite, 4 xdist workers). Reference suite times for discrete evaluation.
+containers:
+  tests: {image: test-sim, env: {WORKERS: 4}}

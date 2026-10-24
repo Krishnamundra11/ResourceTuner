@@ -1,0 +1,11 @@
+description: CODE_INDEXING vs an I/O hog doing direct (uncached) disk writes.
+containers:
+  indexer:
+    image: indexer-sim
+    volumes: {rt-indexer-corpus: /corpus}
+  hog: {image: io-hog}
+default_level: medium
+levels:
+  low:    {hog: {env: {HDD_WORKERS: 1}}}
+  medium: {hog: {env: {HDD_WORKERS: 2}}}
+  high:   {hog: {env: {HDD_WORKERS: 4}}}

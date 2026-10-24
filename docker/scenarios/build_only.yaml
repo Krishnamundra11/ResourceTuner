@@ -1,0 +1,3 @@
+description: BUILD workload alone (no contention). Reference build times for the discrete evaluation mode.
+containers:
+  build: {image: build-sim, env: {JOBS: 4}}

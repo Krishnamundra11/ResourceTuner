@@ -1,0 +1,26 @@
+# Safety Gate policy (Step 6). Hand-maintained — unlike thresholds.yaml, which
+# scripts/calibrate_thresholds.py regenerates. Every rule is deterministic; the gate never asks an LLM.
+
+allowed_actions:              # tool -> the only cgroup knob it may change
+  set_container_cpu_weight: cpu.weight
+  # set_container_io_weight: io.weight   # disabled in Step 7: no exact rollback, no effect here (see tools.DISABLED_TOOLS)
+  set_container_cpu_limit: cpu.max
+  pause_container: freeze
+
+protected_name_patterns: []   # extra fnmatch patterns of container names that may never be touched
+
+# Workload classes whose resources may never be REDUCED (deprioritized, throttled, paused).
+# The host's current workload is always protected too, whatever its class.
+protected_workloads: [BUILD, TESTING, DEV_SERVER]
+
+bounds:                       # policy bounds, tighter than the tool schema's physical ranges
+  cpu_weight: [10, 1000]      # default 100; 1000 = 10x boost cap, so no container can starve system.slice
+  io_weight: [10, 1000]
+  cpu_limit_min_cores: 0.5    # never throttle below half a core
+
+max_jump_factor: 5            # one action may change a weight by at most 5x (100 -> 20 ok, 100 -> 10 not)
+cpu_limit_max_cut_factor: 4   # an existing limit may shrink to at most 1/4 per action (unlimited -> any >= min)
+
+cooldown_s: 45                # brief §8: 30-60 s between actions on the same target
+max_actions_in_flight: 1      # brief §6: one action at a time, evaluate, then the next
+allow_pause: true             # pause only ever applies to non-protected (background/unknown) targets

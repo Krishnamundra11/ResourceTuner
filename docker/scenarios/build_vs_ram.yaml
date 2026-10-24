@@ -1,0 +1,9 @@
+description: BUILD vs a memory hog. Each hog has a hard memory cap so the VM (no swap) can't be OOM'd.
+containers:
+  build: {image: build-sim, env: {JOBS: 4}}
+  hog:   {image: ram-hog, mem_limit: 2g, env: {VM_BYTES: 1G}}
+default_level: medium
+levels:
+  low:    {hog: {mem_limit: 1g,   env: {VM_BYTES: 512M}}}
+  medium: {hog: {mem_limit: 2g,   env: {VM_BYTES: 1536M}}}
+  high:   {hog: {mem_limit: 3g,   env: {VM_BYTES: 2560M}}}

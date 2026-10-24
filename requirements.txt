@@ -1,0 +1,20 @@
+# Python 3.13 (CrewAI 1.15 requires <3.14). Create with:  uv venv venv --python 3.13
+# Install with:  uv pip install --python venv/bin/python -r requirements.txt -c constraints.txt
+# Step 1 — telemetry
+psutil==7.2.2      # host CPU/mem/disk/process metrics
+docker==7.2.0      # container discovery + metadata (metrics read from cgroup v2)
+# Step 2 — scenario files (also config/*.yaml)
+PyYAML==6.0.3
+# Step 5 — MCP tool server. 1.28.x because CrewAI 1.15 requires mcp~=1.28.1 (ADK accepts <3).
+mcp==1.28.1
+# Step 8 — agents: CrewAI (diagnostic crew via OpenRouter / Ollama fallback), Google ADK (Gemini)
+crewai[litellm]==1.15.28
+google-adk==2.12.0
+# 1.105.0, not 1.106.x: 1.106's chat-completions path imports mcp.types.CacheableResult, missing from
+# mcp 1.28.1 (pinned for CrewAI) -> every LiteLLM call WITH TOOLS fails (ADK -> Groq fallback).
+litellm==1.105.0
+# Dev dashboard. 0.141.x: newer FastAPI needs opentelemetry-api>=1.44, google-adk 2.12 needs <=1.42.1.
+fastapi==0.141.1
+uvicorn==0.54.0
+# Dev
+pytest==9.1.1
