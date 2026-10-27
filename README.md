@@ -129,21 +129,38 @@ counting block-I/O wait as activity (all 12 scenarios at 100%). The classifier t
 fitted on CPU-only data; the next collection logs activity, so a rerun will refit them on it. Full methodology,
 tables and caveats: `docs/step4_calibration.md`.
 
-## Live dashboard (developer viewer)
+## Dashboard — control center + legacy viewer
+
+The frontend (React/TS, in `frontend/`) is **not committed as built output** — build it once
+before `/ui/` will work:
 
 ```bash
-./venv/bin/python -m resourcetuner.dashboard        # then open http://localhost:8000
+cd frontend
+npm install
+npm run build        # writes resourcetuner/dashboard/static/app/ (gitignored; rebuild after any frontend change)
+cd ..
+```
+
+Then start the backend:
+
+```bash
+./venv/bin/python -m resourcetuner.dashboard        # http://localhost:8000 redirects to /ui/
 ./venv/bin/python -m resourcetuner.dashboard --host 0.0.0.0 --port 8000   # reachable from the VM host
 ```
 
+- **`/ui/`** — the full control center (Overview, Live Lab, Agent Pipeline, Diagnosis &
+  Explainability, Safety & Actions, Performance & Evaluation, Policy Learning, Historical Runs &
+  Replay, System Health). Live data over `GET /api/snapshot` (1 Hz) and `GET /api/events/stream`
+  (SSE, per-stage pipeline events); Historical Replay is strictly read-only. If the frontend
+  hasn't been built yet, `/ui/` returns a 503 explaining that.
+- **`/legacy`** — the original single-file developer viewer (host CPU/memory/disk cards, the
+  classifier result, a container table, a 60 s canvas chart). Kept working as a fallback; always
+  available even without a frontend build.
+
 One background thread samples host + container telemetry at 1 Hz and classifies the window;
-`GET /api/snapshot` returns the latest result plus 60 s of history, and the page polls it every
-second. Shows host CPU / memory / disk I/O cards, the classifier result (confidence =
-min(dominance, persistence), LLM-fallback reasons highlighted), a container table with each
-container's classified class (ground-truth label shown alongside, for visual validation only),
-and a 60 s CPU/memory chart with a per-second workload strip. The chart is drawn on a plain
-`<canvas>`, so it works offline. This is a read-only viewer; the §3 pipeline dashboard
-(SSE, per-stage streaming, "Analyze & Optimize") comes later.
+`GET /api/snapshot` returns the latest result plus 60 s of history. Confidence =
+min(dominance, persistence); the ground-truth label shown alongside a container's classified
+class is for visual validation only — the classifier never reads it.
 
 ## MCP tool server (Step 5)
 

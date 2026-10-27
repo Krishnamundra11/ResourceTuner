@@ -68,7 +68,21 @@ data/*
 *.sublime-project
 
 # ------------------------------------------------------------------------------
-# 7. OS Generated Files
+# 7. Node.js / Frontend (frontend/ has its own .gitignore for its build output and
+#    Playwright artifacts; this is a repo-wide safety net in case node_modules ever
+#    appears somewhere else)
+# ------------------------------------------------------------------------------
+node_modules/
+*.tsbuildinfo
+
+# Built SPA (the output of `cd frontend && npm run build`). Not committed: it is
+# regenerated on every build with new content-hashed filenames, so committing it would
+# make every rebuild look like a full-file rewrite. Run the build once locally for
+# resourcetuner/dashboard/main.py's /ui/ route to work — see README.md.
+resourcetuner/dashboard/static/app/
+
+# ------------------------------------------------------------------------------
+# 8. OS Generated Files
 # ------------------------------------------------------------------------------
 .DS_Store
 .DS_Store?

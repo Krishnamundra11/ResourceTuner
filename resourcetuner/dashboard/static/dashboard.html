@@ -1,273 +1,547 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ResourceTuner Live</title>
-<style>
-  :root {
-    --bg: #f6f7f9; --panel: #ffffff; --border: #e3e6ea; --text: #1b1f24; --muted: #66707a;
-    --accent: #2f6fde; --grid: #eceef1;
-    --cpu: #2f6fde; --mem: #9b59b6;
-    --warn-bg: #fff4e0; --warn-border: #f0b44c; --warn-text: #7a4b00;
-    --bad: #c0392b; --ok: #1e8e5a;
-    --c-build: #e67e22; --c-testing: #8e44ad; --c-indexing: #16a085; --c-dev: #2980b9;
-    --c-idle: #95a5a6; --c-unknown: #c0392b; --c-none: #d5d9de;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #111418; --panel: #1a1f25; --border: #2b323a; --text: #e6e9ec; --muted: #9aa4ae;
-      --accent: #6ea0ff; --grid: #252b32; --cpu: #6ea0ff; --mem: #c08ae0;
-      --warn-bg: #3a2c12; --warn-border: #b7832a; --warn-text: #ffd89a;
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ResourceTuner Live</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --border: #e3e6ea;
+      --text: #1b1f24;
+      --muted: #66707a;
+      --accent: #2f6fde;
+      --grid: #eceef1;
+      --cpu: #2f6fde;
+      --mem: #9b59b6;
+      --warn-bg: #fff4e0;
+      --warn-border: #f0b44c;
+      --warn-text: #7a4b00;
+      --bad: #c0392b;
+      --ok: #1e8e5a;
+      --c-build: #e67e22;
+      --c-testing: #8e44ad;
+      --c-indexing: #16a085;
+      --c-dev: #2980b9;
+      --c-idle: #95a5a6;
+      --c-unknown: #c0392b;
+      --c-none: #d5d9de;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #111418;
+        --panel: #1a1f25;
+        --border: #2b323a;
+        --text: #e6e9ec;
+        --muted: #9aa4ae;
+        --accent: #6ea0ff;
+        --grid: #252b32;
+        --cpu: #6ea0ff;
+        --mem: #c08ae0;
+        --warn-bg: #3a2c12;
+        --warn-border: #b7832a;
+        --warn-text: #ffd89a;
+        --c-none: #3a424b;
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #111418;
+      --panel: #1a1f25;
+      --border: #2b323a;
+      --text: #e6e9ec;
+      --muted: #9aa4ae;
+      --accent: #6ea0ff;
+      --grid: #252b32;
+      --cpu: #6ea0ff;
+      --mem: #c08ae0;
+      --warn-bg: #3a2c12;
+      --warn-border: #b7832a;
+      --warn-text: #ffd89a;
       --c-none: #3a424b;
     }
-  }
-  :root[data-theme="dark"] {
-    --bg: #111418; --panel: #1a1f25; --border: #2b323a; --text: #e6e9ec; --muted: #9aa4ae;
-    --accent: #6ea0ff; --grid: #252b32; --cpu: #6ea0ff; --mem: #c08ae0;
-    --warn-bg: #3a2c12; --warn-border: #b7832a; --warn-text: #ffd89a;
-    --c-none: #3a424b;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
-  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  h1 { font-size: 20px; margin: 0; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
-  .status { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-idle); }
-  .dot.live { background: var(--ok); }
-  .dot.down { background: var(--bad); }
-  section { margin-top: 18px; }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-  .card .label { color: var(--muted); font-size: 13px; }
-  .card .big { font-size: 34px; font-weight: 650; font-variant-numeric: tabular-nums; margin: 2px 0; }
-  .card .sub { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-  .bar { height: 6px; background: var(--grid); border-radius: 3px; overflow: hidden; margin-top: 8px; }
-  .bar > span { display: block; height: 100%; background: var(--accent); width: 0; transition: width .4s; }
-  .cls { display: grid; grid-template-columns: minmax(200px, 1fr) 2fr; gap: 16px; align-items: start; }
-  .workload { font-size: 30px; font-weight: 700; letter-spacing: .02em; }
-  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; background: var(--c-none); }
-  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-  .metric .k { color: var(--muted); font-size: 12px; }
-  .metric .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .fallback { margin-top: 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--warn-border); background: var(--warn-bg); color: var(--warn-text); }
-  .fallback b { display: block; margin-bottom: 2px; }
-  .fallback ul { margin: 4px 0 0; padding-left: 18px; }
-  .ok-note { margin-top: 12px; color: var(--muted); font-size: 13px; }
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-  th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
-  td.num, th.num { text-align: right; }
-  .muted { color: var(--muted); }
-  .empty { color: var(--muted); padding: 12px 10px; }
-  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
-  .legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
-  canvas { width: 100%; display: block; }
-  #chart { height: 220px; }
-  #strip { height: 14px; margin-top: 6px; border-radius: 3px; }
-  @media (max-width: 640px) {
-    .cls { grid-template-columns: 1fr; }
-    .card .big { font-size: 28px; }
-  }
-</style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+    }
+
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      font-size: 20px;
+      margin: 0;
+    }
+
+    h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      margin: 0 0 10px;
+      font-weight: 600;
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--c-idle);
+    }
+
+    .dot.live {
+      background: var(--ok);
+    }
+
+    .dot.down {
+      background: var(--bad);
+    }
+
+    section {
+      margin-top: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .card .label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .card .big {
+      font-size: 34px;
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+      margin: 2px 0;
+    }
+
+    .card .sub {
+      color: var(--muted);
+      font-size: 12.5px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bar {
+      height: 6px;
+      background: var(--grid);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .bar>span {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+      width: 0;
+      transition: width .4s;
+    }
+
+    .cls {
+      display: grid;
+      grid-template-columns: minmax(200px, 1fr) 2fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .workload {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      background: var(--c-none);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+    }
+
+    .metric .k {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric .v {
+      font-size: 18px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .fallback {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--warn-border);
+      background: var(--warn-bg);
+      color: var(--warn-text);
+    }
+
+    .fallback b {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .fallback ul {
+      margin: 4px 0 0;
+      padding-left: 18px;
+    }
+
+    .ok-note {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12.5px;
+    }
+
+    td.num,
+    th.num {
+      text-align: right;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 12px 10px;
+    }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .legend i {
+      display: inline-block;
+      width: 12px;
+      height: 3px;
+      border-radius: 2px;
+      vertical-align: middle;
+      margin-right: 5px;
+    }
+
+    canvas {
+      width: 100%;
+      display: block;
+    }
+
+    #chart {
+      height: 220px;
+    }
+
+    #strip {
+      height: 14px;
+      margin-top: 6px;
+      border-radius: 3px;
+    }
+
+    @media (max-width: 640px) {
+      .cls {
+        grid-template-columns: 1fr;
+      }
+
+      .card .big {
+        font-size: 28px;
+      }
+    }
+  </style>
 </head>
+
 <body>
-<main>
-  <header>
-    <h1>ResourceTuner — live telemetry</h1>
-    <div class="status"><span id="dot" class="dot"></span><span id="status">connecting…</span></div>
-  </header>
+  <main>
+    <header>
+      <h1>ResourceTuner — live telemetry</h1>
+      <div class="status"><span id="dot" class="dot"></span><span id="status">connecting…</span></div>
+    </header>
 
-  <section class="cards">
-    <div class="panel card">
-      <div class="label">Host CPU</div>
-      <div class="big" id="cpu">–</div>
-      <div class="sub" id="cpu-sub">&nbsp;</div>
-      <div class="bar"><span id="cpu-bar"></span></div>
-    </div>
-    <div class="panel card">
-      <div class="label">Memory</div>
-      <div class="big" id="mem">–</div>
-      <div class="sub" id="mem-sub">&nbsp;</div>
-      <div class="bar"><span id="mem-bar" style="background:var(--mem)"></span></div>
-    </div>
-    <div class="panel card">
-      <div class="label">Disk I/O</div>
-      <div class="big" id="io">–</div>
-      <div class="sub" id="io-sub">&nbsp;</div>
-      <div class="bar"><span id="io-bar" style="background:var(--c-indexing)"></span></div>
-    </div>
-  </section>
-
-  <section class="panel">
-    <h2>Classifier</h2>
-    <div class="cls">
-      <div>
-        <div class="workload" id="workload">–</div>
-        <div class="muted" id="bg-activity">&nbsp;</div>
+    <section class="cards">
+      <div class="panel card">
+        <div class="label">Host CPU</div>
+        <div class="big" id="cpu">–</div>
+        <div class="sub" id="cpu-sub">&nbsp;</div>
+        <div class="bar"><span id="cpu-bar"></span></div>
       </div>
-      <div class="metrics">
-        <div class="metric"><div class="k">Confidence</div><div class="v" id="confidence">–</div></div>
-        <div class="metric"><div class="k">Dominance</div><div class="v" id="dominance">–</div></div>
-        <div class="metric"><div class="k">Persistence</div><div class="v" id="persistence">–</div></div>
-        <div class="metric"><div class="k">Unattributed activity</div><div class="v" id="unattributed">–</div></div>
+      <div class="panel card">
+        <div class="label">Memory</div>
+        <div class="big" id="mem">–</div>
+        <div class="sub" id="mem-sub">&nbsp;</div>
+        <div class="bar"><span id="mem-bar" style="background:var(--mem)"></span></div>
       </div>
-    </div>
-    <div id="fallback"></div>
-  </section>
+      <div class="panel card">
+        <div class="label">Disk I/O</div>
+        <div class="big" id="io">–</div>
+        <div class="sub" id="io-sub">&nbsp;</div>
+        <div class="bar"><span id="io-bar" style="background:var(--c-indexing)"></span></div>
+      </div>
+    </section>
 
-  <section class="panel">
-    <h2>Containers</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th>Name</th><th class="num">CPU</th><th class="num">RAM</th><th class="num">I/O r / w</th>
-          <th>Classified as</th><th>Label <span class="muted">(ground truth, not used)</span></th>
-        </tr></thead>
-        <tbody id="containers"><tr><td class="empty" colspan="6">waiting for data…</td></tr></tbody>
-      </table>
-    </div>
-  </section>
+    <section class="panel">
+      <h2>Classifier</h2>
+      <div class="cls">
+        <div>
+          <div class="workload" id="workload">–</div>
+          <div class="muted" id="bg-activity">&nbsp;</div>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="k">Confidence</div>
+            <div class="v" id="confidence">–</div>
+          </div>
+          <div class="metric">
+            <div class="k">Dominance</div>
+            <div class="v" id="dominance">–</div>
+          </div>
+          <div class="metric">
+            <div class="k">Persistence</div>
+            <div class="v" id="persistence">–</div>
+          </div>
+          <div class="metric">
+            <div class="k">Unattributed activity</div>
+            <div class="v" id="unattributed">–</div>
+          </div>
+        </div>
+      </div>
+      <div id="fallback"></div>
+    </section>
 
-  <section class="panel">
-    <h2>Last 60 seconds</h2>
-    <div class="legend">
-      <span><i style="background:var(--cpu)"></i>Host CPU %</span>
-      <span><i style="background:var(--mem)"></i>Memory %</span>
-      <span class="muted">strip = classified workload per second</span>
-    </div>
-    <canvas id="chart"></canvas>
-    <canvas id="strip"></canvas>
-  </section>
-</main>
+    <section class="panel">
+      <h2>Containers</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th class="num">CPU</th>
+              <th class="num">RAM</th>
+              <th class="num">I/O r / w</th>
+              <th>Classified as</th>
+              <th>Label <span class="muted">(ground truth, not used)</span></th>
+            </tr>
+          </thead>
+          <tbody id="containers">
+            <tr>
+              <td class="empty" colspan="6">waiting for data…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-<script>
-const $ = id => document.getElementById(id);
-const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const CLASS_VAR = { BUILD: "--c-build", TESTING: "--c-testing", CODE_INDEXING: "--c-indexing",
-                    DEV_SERVER: "--c-dev", IDLE: "--c-idle", UNKNOWN: "--c-unknown" };
-const classColor = c => css(CLASS_VAR[c] || "--c-none");
-const fmt = (x, d = 1) => (x === null || x === undefined) ? "–" : Number(x).toFixed(d);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
-const pill = c => c ? `<span class="pill" style="background:${classColor(c)}">${esc(c)}</span>` : '<span class="muted">–</span>';
+    <section class="panel">
+      <h2>Last 60 seconds</h2>
+      <div class="legend">
+        <span><i style="background:var(--cpu)"></i>Host CPU %</span>
+        <span><i style="background:var(--mem)"></i>Memory %</span>
+        <span class="muted">strip = classified workload per second</span>
+      </div>
+      <canvas id="chart"></canvas>
+      <canvas id="strip"></canvas>
+    </section>
+  </main>
 
-let lastData = null, lastOk = 0;
+  <script>
+    const $ = id => document.getElementById(id);
+    const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const CLASS_VAR = {
+      BUILD: "--c-build", TESTING: "--c-testing", CODE_INDEXING: "--c-indexing",
+      DEV_SERVER: "--c-dev", IDLE: "--c-idle", UNKNOWN: "--c-unknown"
+    };
+    const classColor = c => css(CLASS_VAR[c] || "--c-none");
+    const fmt = (x, d = 1) => (x === null || x === undefined) ? "–" : Number(x).toFixed(d);
+    const esc = s => String(s ?? "").replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+    const pill = c => c ? `<span class="pill" style="background:${classColor(c)}">${esc(c)}</span>` : '<span class="muted">–</span>';
 
-function setStatus(state, text) {
-  $("dot").className = "dot " + state;
-  $("status").textContent = text;
-}
+    let lastData = null, lastOk = 0;
 
-function render(d) {
-  const h = d.host;
-  $("cpu").textContent = fmt(h.cpu_percent) + "%";
-  $("cpu-sub").textContent = `${h.cores} cores · load ${fmt(h.load_1m, 2)} · iowait ${fmt(h.iowait_percent)}% · PSI ${fmt(h.psi_cpu)}%`;
-  $("cpu-bar").style.width = Math.min(100, h.cpu_percent) + "%";
-  $("mem").textContent = fmt(h.memory_percent) + "%";
-  $("mem-sub").textContent = `${(h.memory_available_mib / 1024).toFixed(1)} GiB free of ${(h.memory_total_mib / 1024).toFixed(1)} GiB · PSI ${fmt(h.psi_memory)}%`;
-  $("mem-bar").style.width = Math.min(100, h.memory_percent) + "%";
-  $("io").textContent = fmt(h.disk_read_mib_s + h.disk_write_mib_s) + " MiB/s";
-  $("io-sub").textContent = `read ${fmt(h.disk_read_mib_s)} · write ${fmt(h.disk_write_mib_s)} · util ${fmt(h.disk_util_percent)}% · PSI ${fmt(h.psi_io)}%`;
-  $("io-bar").style.width = Math.min(100, h.disk_util_percent || 0) + "%";
+    function setStatus(state, text) {
+      $("dot").className = "dot " + state;
+      $("status").textContent = text;
+    }
 
-  const c = d.classification;
-  if (c) {
-    $("workload").innerHTML = `<span style="color:${classColor(c.workload)}">${esc(c.workload)}</span>`;
-    $("bg-activity").textContent = c.background_activity.length
-      ? "background: " + c.background_activity.join(", ") : `window: ${c.window} s`;
-    $("confidence").textContent = c.confidence === null ? "n/a" : fmt(c.confidence, 2);
-    $("dominance").textContent = c.dominance === null ? "–" : fmt(c.dominance, 2);
-    $("persistence").textContent = c.persistence === null ? "–" : fmt(c.persistence, 2);
-    $("unattributed").textContent = fmt(c.unattributed_activity_percent, 0) + "%";
-    $("unattributed").title = c.unattributed_processes.join(", ");
-    const ioNote = h.delayacct_enabled === false
-      ? `<div class="fallback"><b>I/O wait not measured</b>kernel.task_delayacct is off, so the classifier sees CPU only and I/O-bound work can look idle. Fix: <code>sudo sysctl kernel.task_delayacct=1</code></div>`
-      : "";
-    $("fallback").innerHTML = ioNote + (c.needs_llm_fallback
-      ? `<div class="fallback"><b>LLM fallback required</b>Rule-based result is not trusted on its own:<ul>${
-          c.fallback_reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul></div>`
-      : `<div class="ok-note">Confidence = min(dominance, persistence). No LLM fallback needed.</div>`);
-  }
+    function render(d) {
+      const h = d.host;
+      $("cpu").textContent = fmt(h.cpu_percent) + "%";
+      $("cpu-sub").textContent = `${h.cores} cores · load ${fmt(h.load_1m, 2)} · iowait ${fmt(h.iowait_percent)}% · PSI ${fmt(h.psi_cpu)}%`;
+      $("cpu-bar").style.width = Math.min(100, h.cpu_percent) + "%";
+      $("mem").textContent = fmt(h.memory_percent) + "%";
+      $("mem-sub").textContent = `${(h.memory_available_mib / 1024).toFixed(1)} GiB free of ${(h.memory_total_mib / 1024).toFixed(1)} GiB · PSI ${fmt(h.psi_memory)}%`;
+      $("mem-bar").style.width = Math.min(100, h.memory_percent) + "%";
+      $("io").textContent = fmt(h.disk_read_mib_s + h.disk_write_mib_s) + " MiB/s";
+      $("io-sub").textContent = `read ${fmt(h.disk_read_mib_s)} · write ${fmt(h.disk_write_mib_s)} · util ${fmt(h.disk_util_percent)}% · PSI ${fmt(h.psi_io)}%`;
+      $("io-bar").style.width = Math.min(100, h.disk_util_percent || 0) + "%";
 
-  const rows = d.containers.map(r => `<tr>
+      const c = d.classification;
+      if (c) {
+        $("workload").innerHTML = `<span style="color:${classColor(c.workload)}">${esc(c.workload)}</span>`;
+        $("bg-activity").textContent = c.background_activity.length
+          ? "background: " + c.background_activity.join(", ") : `window: ${c.window} s`;
+        $("confidence").textContent = c.confidence === null ? "n/a" : fmt(c.confidence, 2);
+        $("dominance").textContent = c.dominance === null ? "–" : fmt(c.dominance, 2);
+        $("persistence").textContent = c.persistence === null ? "–" : fmt(c.persistence, 2);
+        $("unattributed").textContent = fmt(c.unattributed_activity_percent, 0) + "%";
+        $("unattributed").title = c.unattributed_processes.join(", ");
+        const ioNote = h.delayacct_enabled === false
+          ? `<div class="fallback"><b>I/O wait not measured</b>kernel.task_delayacct is off, so the classifier sees CPU only and I/O-bound work can look idle. Fix: <code>sudo sysctl kernel.task_delayacct=1</code></div>`
+          : "";
+        $("fallback").innerHTML = ioNote + (c.needs_llm_fallback
+          ? `<div class="fallback"><b>LLM fallback required</b>Rule-based result is not trusted on its own:<ul>${c.fallback_reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul></div>`
+          : `<div class="ok-note">Confidence = min(dominance, persistence). No LLM fallback needed.</div>`);
+      }
+
+      const rows = d.containers.map(r => `<tr>
       <td>${esc(r.name)}</td>
       <td class="num">${r.cpu_percent === null ? "–" : fmt(r.cpu_percent) + "%"}</td>
       <td class="num">${r.memory_mib === null ? "–" : fmt(r.memory_mib, 0) + " MiB"}${r.memory_limit_mib ? ` <span class="muted">/ ${r.memory_limit_mib}</span>` : ""}</td>
       <td class="num">${fmt(r.io_read_mib_s)} / ${fmt(r.io_write_mib_s)}</td>
       <td>${pill(r.classified_as)}</td>
       <td class="muted">${esc(r.ground_truth_label || "–")}</td></tr>`);
-  $("containers").innerHTML = rows.length ? rows.join("")
-    : `<tr><td class="empty" colspan="6">${d.docker.available ? "no running containers" : "docker unavailable: " + esc(d.docker.error)}</td></tr>`;
+      $("containers").innerHTML = rows.length ? rows.join("")
+        : `<tr><td class="empty" colspan="6">${d.docker.available ? "no running containers" : "docker unavailable: " + esc(d.docker.error)}</td></tr>`;
 
-  drawChart(d.history);
-}
+      drawChart(d.history);
+    }
 
-function sizeCanvas(cv) {
-  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-  if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) {
-    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
-  }
-  const ctx = cv.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  return [ctx, r.width, r.height];
-}
+    function sizeCanvas(cv) {
+      const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+      if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) {
+        cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+      }
+      const ctx = cv.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return [ctx, r.width, r.height];
+    }
 
-function drawChart(hist) {
-  const [ctx, W, H] = sizeCanvas($("chart"));
-  const L = 34, R = 8, T = 8, B = 20, pw = W - L - R, ph = H - T - B;
-  ctx.clearRect(0, 0, W, H);
-  ctx.font = "11px system-ui, sans-serif";
-  ctx.fillStyle = css("--muted"); ctx.strokeStyle = css("--grid"); ctx.lineWidth = 1;
-  for (const v of [0, 25, 50, 75, 100]) {
-    const y = T + ph - v / 100 * ph;
-    ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(W - R, y); ctx.stroke();
-    ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText(v + "%", L - 6, y);
-  }
-  ctx.textAlign = "center"; ctx.textBaseline = "top";
-  for (const s of [60, 45, 30, 15, 0]) ctx.fillText(s ? `-${s}s` : "now", L + pw * (1 - s / 60), T + ph + 5);
-  if (!hist.length) return;
-  const now = hist[hist.length - 1].t;
-  const xOf = t => L + pw * (1 - Math.min(60, now - t) / 60);
-  for (const [key, color] of [["mem", css("--mem")], ["cpu", css("--cpu")]]) {
-    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
-    hist.forEach((p, i) => { const x = xOf(p.t), y = T + ph - Math.min(100, p[key]) / 100 * ph;
-                             i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-    ctx.stroke();
-  }
-  const [sctx, SW, SH] = sizeCanvas($("strip"));
-  sctx.clearRect(0, 0, SW, SH);
-  hist.forEach((p, i) => {
-    const x0 = L + pw * (1 - Math.min(60, now - p.t) / 60);
-    const next = hist[i + 1];
-    const x1 = next ? L + pw * (1 - Math.min(60, now - next.t) / 60) : W - R;
-    sctx.fillStyle = classColor(p.workload);
-    sctx.fillRect(x0, 0, Math.max(1, x1 - x0), SH);
-  });
-}
+    function drawChart(hist) {
+      const [ctx, W, H] = sizeCanvas($("chart"));
+      const L = 34, R = 8, T = 8, B = 20, pw = W - L - R, ph = H - T - B;
+      ctx.clearRect(0, 0, W, H);
+      ctx.font = "11px system-ui, sans-serif";
+      ctx.fillStyle = css("--muted"); ctx.strokeStyle = css("--grid"); ctx.lineWidth = 1;
+      for (const v of [0, 25, 50, 75, 100]) {
+        const y = T + ph - v / 100 * ph;
+        ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(W - R, y); ctx.stroke();
+        ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText(v + "%", L - 6, y);
+      }
+      ctx.textAlign = "center"; ctx.textBaseline = "top";
+      for (const s of [60, 45, 30, 15, 0]) ctx.fillText(s ? `-${s}s` : "now", L + pw * (1 - s / 60), T + ph + 5);
+      if (!hist.length) return;
+      const now = hist[hist.length - 1].t;
+      const xOf = t => L + pw * (1 - Math.min(60, now - t) / 60);
+      for (const [key, color] of [["mem", css("--mem")], ["cpu", css("--cpu")]]) {
+        ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
+        hist.forEach((p, i) => {
+          const x = xOf(p.t), y = T + ph - Math.min(100, p[key]) / 100 * ph;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        });
+        ctx.stroke();
+      }
+      const [sctx, SW, SH] = sizeCanvas($("strip"));
+      sctx.clearRect(0, 0, SW, SH);
+      hist.forEach((p, i) => {
+        const x0 = L + pw * (1 - Math.min(60, now - p.t) / 60);
+        const next = hist[i + 1];
+        const x1 = next ? L + pw * (1 - Math.min(60, now - next.t) / 60) : W - R;
+        sctx.fillStyle = classColor(p.workload);
+        sctx.fillRect(x0, 0, Math.max(1, x1 - x0), SH);
+      });
+    }
 
-async function poll() {
-  try {
-    const res = await fetch("/api/snapshot", { cache: "no-store" });
-    const d = await res.json();
-    if (res.status === 503) { setStatus("", "warming up…"); return; }
-    lastData = d; lastOk = Date.now();
-    render(d);
-    setStatus(d.sampler_error ? "down" : "live", d.sampler_error ? "sampler error: " + d.sampler_error : "live · 1 s refresh");
-  } catch (e) {
-    const ago = lastOk ? Math.round((Date.now() - lastOk) / 1000) + " s ago" : "never";
-    setStatus("down", "server unreachable (last update " + ago + ")");
-  }
-}
+    async function poll() {
+      try {
+        const res = await fetch("/api/snapshot", { cache: "no-store" });
+        const d = await res.json();
+        if (res.status === 503) { setStatus("", "warming up…"); return; }
+        lastData = d; lastOk = Date.now();
+        render(d);
+        setStatus(d.sampler_error ? "down" : "live", d.sampler_error ? "sampler error: " + d.sampler_error : "live · 1 s refresh");
+      } catch (e) {
+        const ago = lastOk ? Math.round((Date.now() - lastOk) / 1000) + " s ago" : "never";
+        setStatus("down", "server unreachable (last update " + ago + ")");
+      }
+    }
 
-window.addEventListener("resize", () => lastData && drawChart(lastData.history));
-poll();
-setInterval(poll, 1000);
-</script>
+    window.addEventListener("resize", () => lastData && drawChart(lastData.history));
+    poll();
+    setInterval(poll, 1000);
+  </script>
 </body>
+
 </html>

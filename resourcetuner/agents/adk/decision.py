@@ -56,7 +56,7 @@ def _format_bounds_instruction(safety_cfg) -> str:
 
     # cpu.weight floor and ceiling
     cpu_lo, cpu_hi = b.get("cpu_weight", [10, 1000])
-    lines.append(f"- **cpu.weight**: minimum {cpu_lo} (floor), maximum {cpu_hi} (ceiling) (default 100)")
+    lines.append(f"- **cpu.weight**: minimum {cpu_lo} (floor), maximum {cpu_hi} (ceiling)")
 
     # io.weight (if configured)
     if "io_weight" in b:
@@ -67,12 +67,20 @@ def _format_bounds_instruction(safety_cfg) -> str:
     if "cpu_limit_min_cores" in b:
         lines.append(f"- **cpu.max** (CPU quota): minimum {b['cpu_limit_min_cores']} cores (never throttle below this floor)")
 
-    # jump size
+    # jump size — stated as a FORMULA relative to the target's own current value, never a fixed
+    # example. A fixed "e.g. weight 100 -> ..." example here is exactly what caused repeated
+    # rejected cycles once a weight had already drifted below 100 from an earlier applied action
+    # (2026-10-25 vertical slice: cycles 4-5 both proposed moves relative to an assumed baseline
+    # instead of the target's real current weight, and the Gate correctly rejected both).
     max_jump = getattr(safety_cfg, "max_jump_factor", 5.0)
     lines.append(
-        f"- **Maximum change per action**: {max_jump:.0f}x jump limit "
-        f"(e.g. weight 100 may only move within [{int(100 / max_jump)}, {int(100 * max_jump)}]; "
-        f"weight 20 may only move within [{int(20 / max_jump)}, {int(20 * max_jump)}])"
+        f"- **Maximum change per action**: {max_jump:.0f}x jump limit. For ANY candidate, let "
+        f"`current` be THAT TARGET's own current cpu.weight as reported in its evidence entry "
+        f"RIGHT NOW (never a fixed default, never a value from a previous cycle). The proposed "
+        f"value must satisfy current/{max_jump:.0f} <= value <= current*{max_jump:.0f} AND the "
+        f"floor/ceiling above. If `current` is already close to the floor, a further cut by "
+        f"{max_jump:.0f}x is almost certainly infeasible — choose a smaller cut, pause_container, "
+        f"or no_action instead of a value the Gate will reject."
     )
     cut_factor = getattr(safety_cfg, "cpu_limit_max_cut_factor", None)
     if cut_factor:

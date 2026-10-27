@@ -130,6 +130,19 @@ class PolicyStore:
                             workload, condition, action_tool, action_target, param_json,
                         ),
                     )
+                # Append-only log of this one outcome — see schema.sql's `outcomes` table. The
+                # `policies` row above only ever holds lifetime aggregates, which cannot support
+                # a genuine recent-vs-older trend (StatisticsEngine.summarize's `recent_trend`).
+                cursor.execute(
+                    """
+                    INSERT INTO outcomes (
+                        workload, condition, action_tool, action_target, action_param,
+                        outcome, improvement_value, ts
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (workload, condition, action_tool, action_target, param_json,
+                     outcome_upper, improvement_value, now),
+                )
                 conn.commit()
 
         return {
@@ -146,6 +159,29 @@ class PolicyStore:
             "last_outcome": outcome_upper,
             "last_updated": now,
         }
+
+    def get_outcomes(self, workload: str, condition: str, action_tool: str, action_target: str,
+                     action_param: dict[str, Any] | str) -> list[dict[str, Any]]:
+        """Every individually recorded outcome for one policy key, oldest first.
+
+        This is the granular data `recent_trend` needs; an entry recorded before the `outcomes`
+        table existed has none here even though its aggregate `policies` row does — there is
+        nothing to backfill it with, so StatisticsEngine falls back to a coarser signal for it
+        rather than inventing a history that was never recorded."""
+        param_json = self._param_to_json(action_param)
+        with self._lock:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    """
+                    SELECT outcome, improvement_value, ts FROM outcomes
+                    WHERE workload = ? AND condition = ? AND action_tool = ?
+                          AND action_target = ? AND action_param = ?
+                    ORDER BY ts ASC, id ASC
+                    """,
+                    (workload, condition, action_tool, action_target, param_json),
+                ).fetchall()
+        return [dict(r) for r in rows]
 
     def get_history(self, workload: str, condition: str, top_n: int = 3) -> list[dict[str, Any]]:
         """Fetch up to top_n relevant historical entries for a workload & condition."""

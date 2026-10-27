@@ -4,13 +4,16 @@
 
 A background thread samples host + container telemetry once per second and classifies the
 recent window; GET /api/snapshot returns the latest result plus the last 60 s of history, and
-GET / serves static/dashboard.html, which polls that endpoint every second.
+GET / serves the built control centre (frontend/, a React SPA) from static/app; the original
+single-file developer viewer stays reachable at /legacy.
 
 Sampling happens in ONE thread, not per request: telemetry rates are deltas between samples
 and the classifier needs a contiguous window, so N browser tabs must not create N samplers.
 
-This is a read-only viewer. The §3 pipeline dashboard (SSE, per-stage streaming, manual
-"Analyze & Optimize") is a later step and will build on this.
+Beyond that read-only view, `dashboard/api.py` adds the run/event API and the SSE stream that
+the §3 pipeline dashboard needs; `dashboard/history.py` serves the read-only records. Every
+mutating path goes through the run manager, the Safety Gate and the Resource Controller — this
+module never touches a container or a cgroup itself.
 """
 
 from __future__ import annotations
@@ -22,14 +25,17 @@ from collections import deque
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from resourcetuner.classifier.rules import ClassifierConfig, Classification, classify
 from resourcetuner.telemetry.containers import ContainersSnapshot, ContainerTelemetry
 from resourcetuner.telemetry.host import HostSnapshot, HostTelemetry
 
 STATIC = Path(__file__).resolve().parent / "static"
+# Built by `npm run build` in frontend/ (vite.config.ts writes here with base "/ui/").
+SPA = STATIC / "app"
 HISTORY_S = 60
 
 
@@ -139,19 +145,63 @@ class Sampler:
                 next_tick = time.monotonic()  # fell far behind (e.g. VM stall): don't burst-catch-up
 
 
-def create_app(sampler: Sampler) -> FastAPI:
-    app = FastAPI(title="ResourceTuner dashboard")
+def create_app(sampler: Sampler | None = None, store: "EventStore | None" = None,
+               manager: "RunManager | None" = None) -> FastAPI:
+    """The dashboard app. `store`/`manager` are injectable so tests can use a temporary DB."""
+    from resourcetuner.dashboard.api import build_router
+    from resourcetuner.events.store import EventStore
+    from resourcetuner.pipeline.runner import RunManager
 
-    @app.get("/")
-    def index() -> FileResponse:
+    store = store or EventStore()
+    manager = manager or RunManager(store)
+    app = FastAPI(title="ResourceTuner — AI Resource Optimization Control Center")
+    app.state.store, app.state.manager, app.state.sampler = store, manager, sampler
+
+    # The API is mounted first so no SPA route can ever shadow an endpoint.
+    app.include_router(build_router(store, manager, sampler))
+
+    @app.get("/legacy")
+    def legacy() -> FileResponse:
+        """The original single-file viewer, kept working as a fallback."""
         return FileResponse(STATIC / "dashboard.html")
 
-    @app.get("/api/snapshot")
-    def snapshot() -> JSONResponse:
-        payload, error = sampler.latest()
-        if payload is None:
-            return JSONResponse({"status": "warming_up", "error": error}, status_code=503)
-        return JSONResponse({**payload, "sampler_error": error})
+    if (SPA / "index.html").is_file():
+        # Hashed assets under /ui/assets/ are immutable, so they are served straight from disk.
+        app.mount("/ui/assets", StaticFiles(directory=SPA / "assets"), name="spa-assets")
+
+        @app.get("/")
+        def index() -> RedirectResponse:
+            return RedirectResponse("/ui/")
+
+        @app.get("/ui")
+        @app.get("/ui/")
+        def spa_root() -> FileResponse:
+            return FileResponse(SPA / "index.html")
+
+        @app.get("/ui/{path:path}")
+        def spa_file(path: str) -> FileResponse:
+            """Serve a real built file, or fall back to index.html for a client-side route.
+
+            The app uses hash routing, so this fallback is only reached by a stray URL — but
+            without it such a URL would 404 instead of landing on the dashboard. Paths are
+            resolved and checked to stay inside the build directory.
+            """
+            candidate = (SPA / path).resolve()
+            if candidate.is_file() and candidate.is_relative_to(SPA.resolve()):
+                return FileResponse(candidate)
+            return FileResponse(SPA / "index.html")
+    else:
+        @app.get("/")
+        def index_unbuilt() -> FileResponse:
+            return FileResponse(STATIC / "dashboard.html")
+
+        @app.get("/ui")
+        @app.get("/ui/")
+        def spa_missing() -> JSONResponse:
+            raise HTTPException(status_code=503, detail={
+                "error": "ui_not_built",
+                "message": "The control centre has not been built. Run `npm run build` in frontend/.",
+            })
 
     return app
 

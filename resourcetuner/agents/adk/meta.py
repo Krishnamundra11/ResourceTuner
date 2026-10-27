@@ -5,7 +5,7 @@ Policy Store or demoted.
 
 To conserve quota and adhere to deterministic safety (approved decision 5-A):
 - Runs after every evaluation verdict.
-- Deterministic checks bypass LLM calls when sample counts are insufficient (< 5) or
+- Deterministic checks bypass LLM calls when sample counts are insufficient (< 10) or
   success rates are clearly below threshold (< 50% after >= 10 samples).
 - LLM is called strictly for policy reasoning in borderline or promotion-ready cases.
 - In degraded LLM cycles, promotion is strictly rejected without an LLM call.

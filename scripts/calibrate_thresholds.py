@@ -290,7 +290,42 @@ def memory_values(c):
     return {"psi_some_avg10": 10.0, "available_min_percent": EARLYOOM_MIN_AVAIL_PCT}
 
 
-def render_yaml(c, sessions) -> str:
+# Top-level keys this script fits from telemetry data and therefore owns. Any OTHER top-level
+# key already in config/thresholds.yaml (currently just `evaluation:`, hand-tuned, not fitted
+# from telemetry) must survive a --write untouched — see preserve_unowned_sections().
+OWNED_SECTIONS = ("contention", "classifier")
+
+
+def preserve_unowned_sections(existing_text: str) -> str:
+    """Returns the exact original text of every top-level YAML section this script does not
+    own, verbatim (comments, formatting and all) — starting from the first line that is not part
+    of an owned section's header comment or an owned section itself.
+
+    Without this, `--write` replaces the WHOLE file with only `render_yaml`'s output: the
+    `evaluation:` section that EvaluationEngine reads (config/thresholds.yaml's discrete/
+    continuous ±10%/±15% bands) is not produced by `render_yaml` at all, so a bare `--write`
+    would silently delete it. EvaluationEngine.evaluate_discrete() then falls back to its own
+    hardcoded code defaults with NO warning (resourcetuner/evaluation/engine.py:112-115) — those
+    happen to match the current file today, but a future hand-tune of the evaluation bands would
+    be silently lost the next time someone recalibrates the contention/classifier thresholds.
+    """
+    if not existing_text.strip():
+        return ""
+    lines = existing_text.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        # A top-level key: starts at column 0, is not a comment, and ends its first token in ":".
+        if line and not line[0].isspace() and not line.startswith("#") and ":" in line:
+            key = line.split(":", 1)[0].strip()
+            if key and key not in OWNED_SECTIONS:
+                start = i
+                break
+    if start is None:
+        return ""
+    return "\n".join(lines[start:]).rstrip() + "\n"
+
+
+def render_yaml(c, sessions, preserved: str = "") -> str:
     cp, cu, ip, iw = c["cpu_psi"], c["cpu_util"], c["io_psi"], c["iowait"]
     ma, ub, cf, dm = c["min_active"], c["unknown_busy"], c["conflict"], c["dominance"]
     mem = memory_values(c)
@@ -335,7 +370,10 @@ def render_yaml(c, sessions) -> str:
         "                                   # positive = cpu_pressure hogs, which match no developer-tool signature)",
         "",
     ]
-    return "\n".join(lines)
+    out = "\n".join(lines)
+    if preserved:
+        out += "\n" + preserved          # keep the usual one-blank-line gap before the next section
+    return out
 
 
 def render_report(c, sessions) -> str:
@@ -435,10 +473,12 @@ def main(argv=None) -> int:
     report = render_report(c, args.sessions)
     print(report)
     if args.write:
+        preserved = preserve_unowned_sections(CONFIG.read_text()) if CONFIG.is_file() else ""
         REPORT.parent.mkdir(exist_ok=True)
         REPORT.write_text(report)
-        CONFIG.write_text(render_yaml(c, args.sessions))
-        print(f"wrote {CONFIG.relative_to(REPO)} and {REPORT.relative_to(REPO)}")
+        CONFIG.write_text(render_yaml(c, args.sessions, preserved))
+        note = f" (preserved existing: {', '.join(sorted({l.split(':', 1)[0] for l in preserved.splitlines() if l and not l[0].isspace() and ':' in l}))})" if preserved else ""
+        print(f"wrote {CONFIG.relative_to(REPO)} and {REPORT.relative_to(REPO)}{note}")
     return 0
 
 

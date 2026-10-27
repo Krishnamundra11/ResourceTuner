@@ -1,6 +1,7 @@
 """Tests for Step 9 components: PolicyStore, StatisticsEngine, Decision Agent, EvaluationEngine, and Meta-Agent."""
 
 import json
+import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock
 import pytest
@@ -109,6 +110,75 @@ def test_statistics_engine_summarize(tmp_path: Path):
     assert entry["success_rate"] == 0.75
     assert entry["last_outcome"] == "DEGRADED"
     assert entry["recent_trend"] == "degrading"
+
+
+def test_policy_store_records_an_append_only_outcome_per_call(tmp_path: Path):
+    """Reported finding: `policies` only ever held lifetime aggregates, so `recent_trend` had
+    no per-event history to compare against. `outcomes` (schema.sql) is the fix — one row per
+    record_outcome() call, oldest first."""
+    store = PolicyStore(tmp_path / "policy.db")
+    store.record_outcome("BUILD", "cpu_contention", "tool1", "t1", {"w": 1}, "IMPROVED", 10.0)
+    store.record_outcome("BUILD", "cpu_contention", "tool1", "t1", {"w": 1}, "DEGRADED", -3.0)
+
+    rows = store.get_outcomes("BUILD", "cpu_contention", "tool1", "t1", {"w": 1})
+    assert [r["outcome"] for r in rows] == ["IMPROVED", "DEGRADED"]       # oldest first
+    assert rows[0]["improvement_value"] == 10.0 and rows[1]["improvement_value"] == -3.0
+    assert rows[0]["ts"] <= rows[1]["ts"]
+
+    # A different policy key must not see these rows.
+    assert store.get_outcomes("TESTING", "cpu_contention", "tool1", "t1", {"w": 1}) == []
+
+
+def test_recent_trend_is_a_real_recent_vs_older_comparison_not_last_outcome_alone(tmp_path: Path):
+    """The specific gap this finding reported: a single bad last_outcome after a long run of
+    good ones must not alone flip the verdict, and a genuine improving run must read as
+    improving even though its oldest outcomes were poor — `last_outcome` alone could not tell
+    these two histories apart, but a real recent-half vs older-half split can."""
+    stats_mod = __import__("resourcetuner.stats.statistics_engine", fromlist=["_recent_vs_older_trend"])
+
+    # Older half all good, recent half all bad -> degrading (even though overall success rate
+    # 50% would read as "stable" under the old success_rate>=0.70 / <0.40 heuristic).
+    outcomes = ([{"outcome": "IMPROVED", "improvement_value": 10.0, "ts": i} for i in range(4)]
+                + [{"outcome": "DEGRADED", "improvement_value": -5.0, "ts": 4 + i} for i in range(4)])
+    assert stats_mod._recent_vs_older_trend(outcomes) == "degrading"
+
+    # Older half all bad, recent half all good -> improving.
+    outcomes_rev = list(reversed([dict(o, ts=7 - i) for i, o in enumerate(outcomes)]))
+    assert stats_mod._recent_vs_older_trend(outcomes_rev) == "improving"
+
+    # Equal success rate in both halves, and improvement roughly flat -> stable.
+    flat = [{"outcome": "IMPROVED", "improvement_value": 5.0, "ts": i} for i in range(2)] + \
+           [{"outcome": "DEGRADED", "improvement_value": -5.0, "ts": 2 + i} for i in range(2)] + \
+           [{"outcome": "IMPROVED", "improvement_value": 5.0, "ts": 4 + i} for i in range(2)] + \
+           [{"outcome": "DEGRADED", "improvement_value": -5.0, "ts": 6 + i} for i in range(2)]
+    assert stats_mod._recent_vs_older_trend(flat) == "stable"
+
+    # Too few granular outcomes to split meaningfully -> defer to the caller's fallback.
+    assert stats_mod._recent_vs_older_trend([{"outcome": "IMPROVED", "improvement_value": 1.0, "ts": 0}] * 3) is None
+
+
+def test_summarize_falls_back_to_the_heuristic_for_a_policy_with_no_granular_outcomes(tmp_path: Path):
+    """A policy entry whose aggregate row predates the `outcomes` table (or simply has too few
+    recorded outcomes) has nothing to split — summarize() must say so honestly via the existing
+    coarser heuristic, not silently invent a recent-vs-older split from data that is not there."""
+    store = PolicyStore(tmp_path / "policy.db")
+    store.record_outcome("BUILD", "cpu_contention", "tool1", "t1", {"w": 1}, "IMPROVED", 10.0)
+    # Manually simulate a pre-`outcomes`-table row: aggregate exists, no outcomes rows for it.
+    with sqlite3.connect(store.db_path) as conn:
+        conn.execute("DELETE FROM outcomes")
+        conn.commit()
+
+    stats = StatisticsEngine(store)
+    entry = next(iter(stats.summarize("BUILD", "cpu_contention", top_n=1).values()))
+    assert entry["sample_count"] == 1
+    assert entry["recent_trend"] == "insufficient_data"   # sample_count < 2 path, unaffected
+
+    # Now push it past 2 samples with still-sparse (but present) granular outcomes (< 4 total):
+    # the real split needs >= 4, so this must still fall back to the heuristic, not error out.
+    store.record_outcome("BUILD", "cpu_contention", "tool1", "t1", {"w": 1}, "IMPROVED", 8.0)
+    entry = next(iter(stats.summarize("BUILD", "cpu_contention", top_n=1).values()))
+    assert entry["sample_count"] == 2
+    assert entry["recent_trend"] in ("improving", "stable", "degrading")  # heuristic path, no crash
 
 
 # --- Decision Agent Tests ---
@@ -274,6 +344,45 @@ def test_meta_agent_sample_count_and_rate_boundaries():
     call, r = evaluate_policy_candidate({"sample_count": 7, "success_rate": 0.7, "last_outcome": "DEGRADED"})
     assert call is True
     assert r is None
+
+
+def test_meta_module_docstring_states_the_real_sample_floor():
+    """The module docstring once said '< 5' while the code (and the LLM's own instruction)
+    always used 10 — reconciled to '< 10' so the documented floor can never silently diverge
+    from `evaluate_policy_candidate`'s actual boundary again."""
+    import resourcetuner.agents.adk.meta as meta_module
+    assert "(< 5)" not in meta_module.__doc__     # the stale floor this finding reported
+    assert "(< 10)" in meta_module.__doc__
+    assert "sample_count >= 10" in meta_module.INSTRUCTION
+
+
+def test_force_explore_is_recorded_but_not_yet_consumed():
+    """Documents a deliberate deferral (brief §7's 1-in-5 exploration rule), not a silent gap.
+
+    `force_explore` is rolled and written to the cycle log and to the evidence dict passed into
+    the pipeline, but nothing downstream reads it: `project_evidence()` only ever forwards
+    `ALWAYS` keys plus per-dimension host/target/threshold projections, and `decision_summary()`
+    builds the Decision Agent's input from exactly 4 fixed keys. Implementing the flag's real
+    effect would mean guessing, from this code alone, what the original brief intended
+    "exploration" to change about agent behaviour — which this project will not do silently.
+
+    If a future change wires `force_explore` into an agent, this test should be rewritten to
+    assert that new behaviour, not deleted quietly."""
+    from resourcetuner.agents.adk.decision import decision_summary
+    from resourcetuner.agents.diagnostic_crew.evidence import project_evidence
+
+    evidence = {
+        "trigger": {"metric": "cpu_psi", "value": 20}, "workload": {"class": "BUILD"},
+        "host": {"cpu_percent": 90, "cores": 6, "load_1m": 2, "cpu_psi": 20},
+        "targets": [], "force_explore": True,
+    }
+
+    for agent in ("cpu", "ram", "io"):
+        assert "force_explore" not in project_evidence(agent, evidence)
+
+    summary = decision_summary(evidence, candidates=[], stats_summary={})
+    assert "force_explore" not in summary
+    assert set(summary) == {"workload", "trigger", "candidate_actions", "history_statistics"}
 
 
 def test_tool_handlers_and_gate_reject_degraded_source():

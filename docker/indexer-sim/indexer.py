@@ -15,6 +15,15 @@ Knobs (env vars):
   SEED          corpus generation seed (same seed + size = identical corpus = repeatable runs)
 
 Emits one JSON line per pass on stdout.
+
+Concurrency note (multi-replica design):
+  Multiple replicas of this container share the same CORPUS_DIR volume.  Each replica
+  therefore competes with peers when persisting the per-pass index.  We avoid corruption
+  by using a **process-unique** temporary file (index.json.<pid>.tmp) instead of the
+  shared "index.json.tmp".  The final atomic os.replace() step then lands on the shared
+  "index.json" destination; whichever replica wins the race writes a fully-fsynced,
+  complete index — any other replica's result is equally valid (they all index the same
+  corpus).  Stale tmp files left by a previously-killed process are cleaned up at startup.
 """
 
 import hashlib
@@ -23,6 +32,7 @@ import os
 import random
 import re
 import resource
+import tempfile
 import time
 from collections import Counter, OrderedDict
 
@@ -39,6 +49,12 @@ FILES_PER_DIR = 100
 SRC_DIR = os.path.join(CORPUS_DIR, "src")
 INDEX_DIR = os.path.join(CORPUS_DIR, ".index")
 MANIFEST = os.path.join(CORPUS_DIR, "manifest.json")
+INDEX_FINAL = os.path.join(INDEX_DIR, "index.json")
+
+# Process-unique tmp filename: survives concurrent replicas on the same shared volume.
+# Each process uses its own name, so writes never clobber each other's in-flight tmp.
+_PID = os.getpid()
+INDEX_TMP = os.path.join(INDEX_DIR, f"index.json.{_PID}.tmp")
 
 
 def emit(event: str, **fields) -> None:
@@ -81,6 +97,40 @@ def ensure_corpus() -> list[str]:
     return paths
 
 
+def cleanup_stale_tmps() -> None:
+    """Remove tmp files left by previously-killed replicas.
+
+    Tmp files match 'index.json.*.tmp'.  We skip files whose PID is still alive
+    (another running replica), which is a best-effort check: if the pid has been
+    recycled we may clean a file that belongs to a live-but-PID-recycled process.
+    In that edge case the worst outcome is that replica's next os.replace() sees
+    FileNotFoundError, logs a warning, and continues — it never corrupts the final
+    index because os.replace() is atomic.
+    """
+    if not os.path.isdir(INDEX_DIR):
+        return
+    for name in os.listdir(INDEX_DIR):
+        if not (name.startswith("index.json.") and name.endswith(".tmp")):
+            continue
+        try:
+            # name is "index.json.<pid>.tmp"
+            pid_str = name[len("index.json."):-len(".tmp")]
+            pid = int(pid_str)
+        except ValueError:
+            continue  # unexpected format, leave it alone
+        if pid == _PID:
+            continue  # ours — don't touch it
+        try:
+            os.kill(pid, 0)  # 0 = just check existence; no signal sent
+            # process is alive → leave the file
+        except ProcessLookupError:
+            # pid is dead → safe to remove the stale tmp
+            try:
+                os.unlink(os.path.join(INDEX_DIR, name))
+            except OSError:
+                pass  # another replica beat us to it; harmless
+
+
 def read_file(path: str) -> bytes:
     fd = os.open(path, os.O_RDONLY)
     try:
@@ -94,9 +144,39 @@ def read_file(path: str) -> bytes:
         os.close(fd)
 
 
+def persist_index(hashes: dict, doc_freq: Counter) -> None:
+    """Write the index to a process-unique tmp file, fsync, then atomically replace.
+
+    The final destination (index.json) is always a complete, fsynced document.
+    A concurrent replica overwriting it with its own result is harmless — both
+    replicas index the same corpus files and produce equivalent results.
+    """
+    data = json.dumps({
+        "files": hashes,
+        "top_tokens": [(t.decode(), c) for t, c in doc_freq.most_common(5000)],
+    })
+    # Write to our process-unique tmp; no other replica uses this name.
+    try:
+        with open(INDEX_TMP, "w") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(INDEX_TMP, INDEX_FINAL)
+    except OSError as e:
+        # Log the error and continue — a missed persist is not fatal for a simulator.
+        emit("persist_error", pid=_PID, error=str(e))
+        # Clean up our own tmp if it still exists
+        try:
+            os.unlink(INDEX_TMP)
+        except OSError:
+            pass
+
+
 def main() -> None:
     paths = ensure_corpus()
     os.makedirs(INDEX_DIR, exist_ok=True)
+    cleanup_stale_tmps()
+
     retain_budget = RETAIN_MB * 1024 * 1024
     cache: OrderedDict[str, bytes] = OrderedDict()  # LRU of file contents (the RAM knob)
     cache_bytes = 0
@@ -119,13 +199,8 @@ def main() -> None:
             while cache_bytes > retain_budget and cache:
                 cache_bytes -= len(cache.popitem(last=False)[1])
 
-        # Persist the index (write I/O), fsync'd like a real indexer's on-disk store.
-        tmp = os.path.join(INDEX_DIR, "index.json.tmp")
-        with open(tmp, "w") as f:
-            json.dump({"files": hashes, "top_tokens": [(t.decode(), c) for t, c in doc_freq.most_common(5000)]}, f)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, os.path.join(INDEX_DIR, "index.json"))
+        # Persist the index atomically using a process-unique tmp file.
+        persist_index(hashes, doc_freq)
 
         emit("index_pass", iteration=pass_no, files=len(paths), mb_read=round(bytes_read / 2**20, 1),
              duration_s=round(time.monotonic() - start, 2), unique_tokens=len(doc_freq),

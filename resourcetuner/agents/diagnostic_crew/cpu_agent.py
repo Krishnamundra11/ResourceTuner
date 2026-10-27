@@ -19,6 +19,7 @@ from resourcetuner.agents.diagnostic_crew.checks import CheckResult, common_issu
 
 from resourcetuner.agents.diagnostic_crew.schemas import CpuDiagnosis
 from resourcetuner.mcp_server import tools as T
+from resourcetuner.safety.gate import SafetyConfig
 
 ROLE = "CPU Diagnostic Agent"
 GOAL = ("Decide from the supplied evidence whether CPU contention is slowing the active developer workload, "
@@ -30,16 +31,37 @@ BACKSTORY = ("Linux performance engineer. Reason only from the given measurement
              "BUILD, TESTING and DEV_SERVER are what the developer waits for: never deprioritise them.")
 
 TASK_TEMPLATE = """Evidence: {evidence}
-Rules: use only target_ids from evidence.targets; name each evidence metric as section.field from the evidence (host.cpu_psi, trigger.threshold), or for a target its full target_id, a dot, then the field, with its exact value; at most ONE
+Rules: use only target_ids from evidence.targets; culprit_target_ids must name ONLY competing background targets causing contention (never include protected workloads like BUILD, TESTING, or DEV_SERVER as culprits); name each evidence metric as section.field from the evidence (host.cpu_psi, trigger.threshold), or for a target its full target_id, a dot, then the field, with its exact value; at most ONE
 action from {tools}; prefer the smallest reversible change (lower a background target's cpu weight) over
-limits or pause; if contention does not hurt the workload set contention=false and candidate_action=null;
+limits or pause; if contention does not hurt the workload or no background targets exist set contention=false and candidate_action=null;
 if you use history, cite the entry and its success counts."""
 
 
-def tool_bounds() -> dict:
+def tool_bounds(safety_cfg: SafetyConfig | None = None) -> dict:
+    """Bounds as the Safety Gate actually enforces them — NOT the raw MCP tool-schema limits.
+
+    `tools.CPU_WEIGHT_MIN/MAX` (1-10000) and `CPU_LIMIT_MIN` (0.1 cores) are what the cgroup
+    interface itself accepts; `config/safety.yaml` is the tighter POLICY the Gate enforces
+    (cpu_weight 10-1000, cpu_limit floor 0.5 cores by default). Telling the agent the wide
+    tool-schema range instead of the real policy caused exactly this: 2026-10-25's vertical
+    slice cycle 5 proposed weight=5, inside [1, 10000] but below the real floor of 10 — the Gate
+    correctly rejected it, but the cycle was wasted. This also states the 5x jump rule, relative
+    to THAT TARGET's OWN current cpu_weight from its evidence entry, never a fixed default —
+    `gate.py:max_jump_factor` is the enforced source of truth.
+    """
+    cfg = safety_cfg or SafetyConfig.load()
+    lo, hi = cfg.bounds.get("cpu_weight", (T.CPU_WEIGHT_MIN, T.CPU_WEIGHT_MAX))
+    jump = cfg.max_jump_factor
+    limit_lo = cfg.bounds.get("cpu_limit_min_cores", T.CPU_LIMIT_MIN)
     return {
-        "set_container_cpu_weight": f"weight integer {T.CPU_WEIGHT_MIN}-{T.CPU_WEIGHT_MAX} (default 100)",
-        "set_container_cpu_limit": f"cpus number {T.CPU_LIMIT_MIN}-{T.CPU_LIMIT_MAX}",
+        "set_container_cpu_weight": (
+            f"weight integer {lo}-{hi}. Also: a single action may move a target's weight by at "
+            f"most {jump:g}x — relative to THAT TARGET's OWN current cpu_weight from its evidence "
+            f"entry, never a fixed default. If the target is already near {lo} (the floor), a "
+            f"further cut is likely out of bounds; prefer pause_container or no_action over "
+            f"proposing a weight the Gate will reject."
+        ),
+        "set_container_cpu_limit": f"cpus number {limit_lo}-{T.CPU_LIMIT_MAX} (never below {limit_lo} cores)",
         "pause_container": "no arguments",
     }
 
