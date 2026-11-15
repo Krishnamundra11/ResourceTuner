@@ -2,8 +2,9 @@
  *  fixtures here. Errors carry the backend's own detail so views can show what went wrong. */
 
 import type {
-  ActionList, LegacyCycleDetail, LegacyCycleList, PolicyList, Run, RunEvents, RunList,
-  ScenarioList, Snapshot, StopResult,
+  AccuracyEvaluation, ActionList, AgentMetrics, BenchmarkResult, CommunicationAnalytics,
+  CostEvaluation, EvaluationHistory, EvaluationSummary, LegacyCycleDetail, LegacyCycleList,
+  PolicyList, Run, RunEvents, RunList, ScenarioList, Snapshot, StopResult,
 } from "./types";
 
 export class ApiError extends Error {
@@ -85,6 +86,15 @@ export const api = {
   historyActions: (params: { limit?: number; offset?: number } = {}) =>
     request<ActionList>(`/api/history/actions?${new URLSearchParams(clean(params))}`),
   historyPolicies: () => request<PolicyList>("/api/history/policies"),
+
+  // Evaluation Framework APIs
+  evalSummary: () => request<EvaluationSummary>("/api/eval/summary"),
+  evalAgents: () => request<{ agents: Record<string, AgentMetrics> }>("/api/eval/agents"),
+  evalCommunication: () => request<CommunicationAnalytics>("/api/eval/communication"),
+  evalAccuracy: () => request<AccuracyEvaluation>("/api/eval/accuracy"),
+  evalCosts: () => request<CostEvaluation>("/api/eval/costs"),
+  evalHistory: () => request<EvaluationHistory>("/api/eval/history"),
+  evalBenchmark: () => request<BenchmarkResult>("/api/eval/benchmark", { method: "POST" }),
 };
 
 function clean(params: Record<string, unknown>): Record<string, string> {

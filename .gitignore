@@ -91,3 +91,12 @@ resourcetuner/dashboard/static/app/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# ------------------------------------------------------------------------------
+# 9. Local Tool Binaries & Sandbox Caches
+# ------------------------------------------------------------------------------
+.node/
+.uv-python/
+.local-share/
+cloudflared
+

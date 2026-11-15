@@ -175,4 +175,8 @@ def build_router(store: EventStore, manager: RunManager, sampler: Any | None = N
     def history_policies() -> dict:
         return H.policies()
 
+    # --- evaluation framework -------------------------------------------------------------
+    from resourcetuner.evaluation.api import build_evaluation_router
+    router.include_router(build_evaluation_router())
+
     return router

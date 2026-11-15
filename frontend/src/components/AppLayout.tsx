@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
-  Activity, Brain, ChevronLeft, FlaskConical, Gauge, History, LayoutDashboard, Menu,
+  Activity, Award, Brain, ChevronLeft, FlaskConical, Gauge, History, LayoutDashboard, Menu,
   PanelLeftClose, PanelLeftOpen, ShieldCheck, Stethoscope, TrendingUp, Workflow, X,
   type LucideIcon,
 } from "lucide-react";
@@ -31,6 +31,7 @@ export const NAV: NavItem[] = [
   { to: "/performance", label: "Performance", icon: TrendingUp },
   { to: "/policy", label: "Policy Learning", icon: Brain },
   { to: "/history", label: "Runs & Replay", icon: History },
+  { to: "/evaluation", label: "Agent Evaluation", icon: Award },
   { to: "/system", label: "System Health", icon: Activity },
 ] as const;
 

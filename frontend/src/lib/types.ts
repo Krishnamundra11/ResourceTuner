@@ -295,3 +295,153 @@ export interface CycleSummaryPayload {
   indexer_initial_weights?: unknown; indexer_post_action_weights?: unknown;
   indexer_final_weights?: unknown;
 }
+
+// --- Evaluation Framework Types ---
+
+export interface EvaluationSummary {
+  overall_system_score: number;
+  end_to_end_accuracy: number;
+  communication_success_rate: number;
+  task_completion_rate: number;
+  total_executions_evaluated: number;
+  average_workflow_latency_s: number;
+  average_cost_per_execution_inr: number;
+  average_cost_per_execution_usd: number;
+  failure_propagation_rate: number;
+  recovery_rate: number;
+  safety_gate_pass_rate: number;
+}
+
+export interface AgentMetrics {
+  name: string;
+  framework: string;
+  model: string;
+  responsibility: string;
+  total_executions?: number;
+  total_evaluations?: number;
+  task_success_rate: number;
+  output_accuracy?: number;
+  hallucination_rate?: number;
+  error_rate: number;
+  avg_latency_ms: number;
+  token_usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+  };
+  actions_chosen?: number;
+  decision_quality_rate?: number;
+  promotions?: number;
+  deterministic_skips?: number;
+}
+
+export interface CommunicationHop {
+  source: string;
+  target: string;
+  messages_sent: number;
+  messages_delivered: number;
+  delivery_rate: number;
+  parsing_rate: number;
+  preservation_rate: number;
+  consistency_rate: number;
+  avg_latency_ms: number;
+  composite_score: number;
+}
+
+export interface CommunicationAnalytics {
+  composite_communication_score: number;
+  overall_delivery_rate: number;
+  overall_parsing_rate: number;
+  overall_preservation_rate: number;
+  overall_consistency_rate: number;
+  average_hop_latency_ms: number;
+  hops: CommunicationHop[];
+  graph: {
+    nodes: { id: string; label: string; type: string; framework: string }[];
+    edges: { source: string; target: string; label: string; status: string; latency_ms: number }[];
+  };
+}
+
+export interface ExecutionEvaluationItem {
+  execution_id: string;
+  scenario: string;
+  cycle: number | null;
+  score: number;
+  passed: boolean;
+  explanation: string;
+  rubric: {
+    contention_detection: number;
+    action_appropriateness: number;
+    post_action_outcome: number;
+    safety_compliance: number;
+  };
+  details: Record<string, unknown>;
+}
+
+export interface AccuracyEvaluation {
+  end_to_end_accuracy: number;
+  pass_rate_percent: number;
+  total_evaluated_executions: number;
+  correct_executions_count: number;
+  failed_executions_count: number;
+  rubric_averages: {
+    contention_detection: number;
+    action_appropriateness: number;
+    post_action_outcome: number;
+    safety_compliance: number;
+  };
+  recent_live_executions: ExecutionEvaluationItem[];
+  benchmark_evaluations: ExecutionEvaluationItem[];
+}
+
+export interface AgentCostItem {
+  agent_id: string;
+  agent_name: string;
+  provider: string;
+  model: string;
+  avg_input_tokens: number;
+  avg_output_tokens: number;
+  input_cost_usd: number;
+  output_cost_usd: number;
+  total_cost_usd: number;
+  total_cost_inr: number;
+}
+
+export interface MonthlyProjectionItem {
+  volume: number;
+  llm_cost_usd: number;
+  infra_cost_usd: number;
+  total_cost_usd: number;
+  total_cost_inr: number;
+}
+
+export interface CostEvaluation {
+  per_cycle_cost_usd: number;
+  per_cycle_cost_inr: number;
+  cost_per_successful_cycle_usd: number;
+  cost_per_successful_cycle_inr: number;
+  agent_cost_breakdown: AgentCostItem[];
+  monthly_projections: MonthlyProjectionItem[];
+  mcp_tools_cost_audit: { tool: string; provider: string; type: string; cost: string }[];
+  optimization_strategies: { strategy: string; savings_pct: string; feasibility: string }[];
+  currency: string;
+  reference_currency: string;
+  exchange_rate: number;
+}
+
+export interface EvaluationHistory {
+  total_cycles: number;
+  trend_data: {
+    cycle: number;
+    score: number;
+    passed: boolean;
+    verdict: string | null;
+    improvement_pct: number | null;
+  }[];
+}
+
+export interface BenchmarkResult {
+  benchmark_score: number;
+  test_cases_count: number;
+  passed_count: number;
+  results: ExecutionEvaluationItem[];
+}

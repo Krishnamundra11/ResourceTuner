@@ -15,6 +15,7 @@ const Performance = lazy(() => import("@/views/Performance"));
 const PolicyLearning = lazy(() => import("@/views/PolicyLearning"));
 const HistoryReplay = lazy(() => import("@/views/HistoryReplay"));
 const SystemHealth = lazy(() => import("@/views/SystemHealth"));
+const Evaluation = lazy(() => import("@/views/Evaluation"));
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/performance" element={<Performance />} />
             <Route path="/policy" element={<PolicyLearning />} />
             <Route path="/history" element={<HistoryReplay />} />
+            <Route path="/evaluation" element={<Evaluation />} />
             <Route path="/system" element={<SystemHealth />} />
             <Route path="*" element={<Overview />} />
           </Routes>
