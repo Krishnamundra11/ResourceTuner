@@ -160,6 +160,10 @@ def create_app(sampler: Sampler | None = None, store: "EventStore | None" = None
     # The API is mounted first so no SPA route can ever shadow an endpoint.
     app.include_router(build_router(store, manager, sampler))
 
+    # A2A Discovery & Endpoints mounted at /a2a (Slides 92-94)
+    from resourcetuner.a2a.api import a2a_router
+    app.include_router(a2a_router, prefix="/a2a")
+
     @app.get("/legacy")
     def legacy() -> FileResponse:
         """The original single-file viewer, kept working as a fallback."""

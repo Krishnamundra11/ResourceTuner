@@ -392,6 +392,20 @@ class LLMRouter:
                              if usage.get(k) is not None} if usage else None}
             with self.call_log.open("a") as f:
                 f.write(json.dumps(rec) + "\n")
+        try:
+            from resourcetuner.telemetry.langfuse_tracer import record_llm_generation
+            record_llm_generation(
+                name=f"{chain}:{a.provider}:{a.model}",
+                provider=a.provider,
+                model=a.model,
+                usage=usage,
+                latency_ms=a.latency_ms,
+                outcome=a.outcome,
+                degraded=degraded,
+                metadata={"detail": a.detail, "structured_mode": a.structured_mode},
+            )
+        except Exception:
+            pass
         return a
 
 

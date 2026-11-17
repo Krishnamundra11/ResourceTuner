@@ -179,4 +179,8 @@ def build_router(store: EventStore, manager: RunManager, sampler: Any | None = N
     from resourcetuner.evaluation.api import build_evaluation_router
     router.include_router(build_evaluation_router())
 
+    # --- A2A protocol endpoints (Slides 90-94) -------------------------------------------
+    from resourcetuner.a2a.api import a2a_router
+    router.include_router(a2a_router, prefix="/a2a")
+
     return router

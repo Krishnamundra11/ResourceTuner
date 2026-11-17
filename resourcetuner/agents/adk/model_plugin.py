@@ -210,6 +210,20 @@ class ModelFallbackPlugin(BasePlugin):
                "degraded": degraded, "usage": usage}
         with self.call_log.open("a") as f:
             f.write(json.dumps(rec) + "\n")
+        try:
+            from resourcetuner.telemetry.langfuse_tracer import record_llm_generation
+            record_llm_generation(
+                name=f"adk:{ctx.agent_name}:{model}",
+                provider=provider,
+                model=model,
+                usage=usage,
+                latency_ms=latency_ms,
+                outcome=outcome,
+                degraded=degraded,
+                metadata={"agent": ctx.agent_name, "detail": detail},
+            )
+        except Exception:
+            pass
 
 
 def _usage(resp) -> dict | None:
