@@ -9,6 +9,7 @@ import { LoadingPanel } from "@/components/StateViews";
 const Overview = lazy(() => import("@/views/Overview"));
 const LiveLab = lazy(() => import("@/views/LiveLab"));
 const AgentPipeline = lazy(() => import("@/views/AgentPipeline"));
+const AgentWorkflow = lazy(() => import("@/views/AgentWorkflow"));
 const Diagnosis = lazy(() => import("@/views/Diagnosis"));
 const SafetyActions = lazy(() => import("@/views/SafetyActions"));
 const Performance = lazy(() => import("@/views/Performance"));
@@ -25,6 +26,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="/live-lab" element={<LiveLab />} />
+            <Route path="/workflow" element={<AgentWorkflow />} />
             <Route path="/pipeline" element={<AgentPipeline />} />
             <Route path="/diagnosis" element={<Diagnosis />} />
             <Route path="/safety" element={<SafetyActions />} />

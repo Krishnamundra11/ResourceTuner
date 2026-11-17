@@ -27,7 +27,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
-os.environ.setdefault("OTEL_SDK_DISABLED", "true")
+
+from resourcetuner.agents.llm_router import load_dotenv  # noqa: E402
+load_dotenv()
+
+if not os.environ.get("LANGFUSE_PUBLIC_KEY"):
+    os.environ.setdefault("OTEL_SDK_DISABLED", "true")
+else:
+    os.environ.pop("OTEL_SDK_DISABLED", None)
 os.environ.setdefault("CREWAI_DISABLE_TELEMETRY", "true")
 
 from resourcetuner.events.store import EventStore, RunEventSink  # noqa: E402

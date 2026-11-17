@@ -337,6 +337,11 @@ class VerticalSlice:
             summary["error"] = f"{type(e).__name__}: {e}"
             log.exception("Run failed")
         finally:
+            try:
+                from resourcetuner.telemetry.langfuse_tracer import flush_traces
+                flush_traces()
+            except Exception:
+                pass
             summary["cleanup"] = self._teardown()
             status = {S.RUN_COMPLETED: S.COMPLETED, S.RUN_CANCELLED: S.SKIPPED,
                       S.RUN_FAILED: S.FAILED}[summary["status"]]

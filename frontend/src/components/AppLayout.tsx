@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Activity, Award, Brain, ChevronLeft, FlaskConical, Gauge, History, LayoutDashboard, Menu,
-  PanelLeftClose, PanelLeftOpen, ShieldCheck, Stethoscope, TrendingUp, Workflow, X,
+  Network, PanelLeftClose, PanelLeftOpen, ShieldCheck, Stethoscope, TrendingUp, Workflow, X,
   type LucideIcon,
 } from "lucide-react";
 import { useSnapshot } from "@/hooks/useSnapshot";
@@ -25,6 +25,7 @@ interface NavItem {
 export const NAV: NavItem[] = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/live-lab", label: "Live Lab", icon: FlaskConical },
+  { to: "/workflow", label: "Agent Workflow", icon: Network },
   { to: "/pipeline", label: "Agent Pipeline", icon: Workflow },
   { to: "/diagnosis", label: "Diagnosis", icon: Stethoscope },
   { to: "/safety", label: "Safety & Actions", icon: ShieldCheck },
